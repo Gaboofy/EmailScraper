@@ -43,6 +43,20 @@
         tr:nth-child(even) {
             background-color: #1a1a1a;
         }
+        code {
+            background-color: #1a1a1a;
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+            font-family: monospace;
+        }
+        .sample-csv {
+            font-family: monospace;
+            background-color: #1a1a1a;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            white-space: pre;
+        }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -51,6 +65,48 @@
             <h1 class="text-2xl md:text-3xl font-bold mb-2">Email Scraper Dashboard</h1>
             <p class="text-gray-400">Upload your high school CSV data to find coach emails</p>
         </header>
+
+        <div class="bg-gray-900 rounded-lg p-6 mb-8 shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">CSV Format Instructions</h2>
+            <div class="mb-6">
+                <p class="mb-3">Your CSV file must include these columns (the exact column names are important):</p>
+                <ul class="list-disc pl-5 mb-4 space-y-1">
+                    <li><code>School</code> - The name of the high school</li>
+                    <li><code>City</code> - The city where the school is located</li>
+                </ul>
+                
+                <p class="mb-3">Sample CSV format:</p>
+                <div class="sample-csv mb-4">School,City
+Lincoln High School,Portland
+Washington High,Seattle
+Roosevelt Academy,Chicago</div>
+                
+                <div class="flex justify-between mb-4">
+                    <button id="download-sample" class="py-2 px-4 rounded-md custom-btn text-sm font-medium">
+                        Download Sample CSV
+                    </button>
+                    <button id="view-advanced" class="py-2 px-4 rounded-md bg-transparent border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm font-medium">
+                        View Advanced Options
+                    </button>
+                </div>
+                
+                <div id="advanced-options" class="hidden bg-gray-800 p-4 rounded-md mb-4">
+                    <h3 class="font-medium mb-2">Advanced CSV Options</h3>
+                    <p class="mb-2">If your CSV has different column names, you can map them:</p>
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <label class="block text-sm mb-1">School column name:</label>
+                            <input type="text" id="school-column" class="w-full p-2 rounded-md bg-gray-700 border border-gray-600" placeholder="e.g. Institution">
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-1">City column name:</label>
+                            <input type="text" id="city-column" class="w-full p-2 rounded-md bg-gray-700 border border-gray-600" placeholder="e.g. Location">
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400">Leave blank to use default column names (School, City)</p>
+                </div>
+            </div>
+        </div>
 
         <div class="bg-gray-900 rounded-lg p-6 mb-8 shadow-lg">
             <h2 class="text-xl font-semibold mb-4">Upload CSV File</h2>
@@ -86,6 +142,23 @@
             <button id="upload-btn" class="w-full py-3 px-4 rounded-md bg-indigo-700 hover:bg-indigo-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                 Process CSV File
             </button>
+        </div>
+
+        <div id="csv-preview" class="hidden bg-gray-900 rounded-lg p-6 mb-8 shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">CSV Preview</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead id="preview-header">
+                        <!-- Headers will be populated here -->
+                    </thead>
+                    <tbody id="preview-body">
+                        <!-- Preview rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4">
+                <p id="preview-status" class="text-sm text-gray-400"></p>
+            </div>
         </div>
 
         <div id="progress-container" class="hidden bg-gray-900 rounded-lg p-6 mb-8 shadow-lg">
@@ -149,10 +222,42 @@
             const resultsBody = document.getElementById('results-body');
             const downloadBtn = document.getElementById('download-btn');
             const newUploadBtn = document.getElementById('new-upload-btn');
+            const viewAdvancedBtn = document.getElementById('view-advanced');
+            const advancedOptions = document.getElementById('advanced-options');
+            const schoolColumnInput = document.getElementById('school-column');
+            const cityColumnInput = document.getElementById('city-column');
+            const downloadSampleBtn = document.getElementById('download-sample');
+            const csvPreview = document.getElementById('csv-preview');
+            const previewHeader = document.getElementById('preview-header');
+            const previewBody = document.getElementById('preview-body');
+            const previewStatus = document.getElementById('preview-status');
             
             let csvFile = null;
             let parsedData = [];
             let results = [];
+            let csvHeaders = [];
+
+            // Toggle advanced options
+            viewAdvancedBtn.addEventListener('click', () => {
+                advancedOptions.classList.toggle('hidden');
+                viewAdvancedBtn.textContent = advancedOptions.classList.contains('hidden') 
+                    ? 'View Advanced Options' 
+                    : 'Hide Advanced Options';
+            });
+
+            // Download sample CSV
+            downloadSampleBtn.addEventListener('click', () => {
+                const sampleCsv = 'School,City\nLincoln High School,Portland\nWashington High,Seattle\nRoosevelt Academy,Chicago';
+                const blob = new Blob([sampleCsv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('hidden', '');
+                a.setAttribute('href', url);
+                a.setAttribute('download', 'sample_schools.csv');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
 
             // Event listeners for drag and drop
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -202,6 +307,7 @@
                     if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
                         csvFile = file;
                         displayFileInfo(file);
+                        previewCSV(file);
                         uploadBtn.disabled = false;
                     } else {
                         alert('Please select a valid CSV file.');
@@ -223,9 +329,76 @@
                 return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
             }
 
+            function previewCSV(file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const csv = e.target.result;
+                    const lines = csv.split('\n');
+                    
+                    if (lines.length === 0) {
+                        previewStatus.textContent = 'Error: CSV file appears to be empty';
+                        return;
+                    }
+                    
+                    // Get headers
+                    csvHeaders = lines[0].split(',').map(header => header.trim());
+                    
+                    // Create header row
+                    previewHeader.innerHTML = '';
+                    const headerRow = document.createElement('tr');
+                    csvHeaders.forEach(header => {
+                        const th = document.createElement('th');
+                        th.className = 'px-4 py-2 text-left';
+                        th.textContent = header;
+                        headerRow.appendChild(th);
+                    });
+                    previewHeader.appendChild(headerRow);
+                    
+                    // Create preview rows (up to 5)
+                    previewBody.innerHTML = '';
+                    const maxRows = Math.min(5, lines.length - 1);
+                    for (let i = 1; i <= maxRows; i++) {
+                        if (lines[i].trim() === '') continue;
+                        
+                        const row = document.createElement('tr');
+                        const values = lines[i].split(',').map(value => value.trim());
+                        
+                        values.forEach((value, index) => {
+                            if (index < csvHeaders.length) {
+                                const td = document.createElement('td');
+                                td.className = 'px-4 py-2 border-b border-gray-800';
+                                td.textContent = value;
+                                row.appendChild(td);
+                            }
+                        });
+                        
+                        previewBody.appendChild(row);
+                    }
+                    
+                    // Check for required columns
+                    const schoolColName = schoolColumnInput.value.trim() || 'School';
+                    const cityColName = cityColumnInput.value.trim() || 'City';
+                    
+                    const hasSchoolCol = csvHeaders.some(h => h.toLowerCase() === schoolColName.toLowerCase());
+                    const hasCityCol = csvHeaders.some(h => h.toLowerCase() === cityColName.toLowerCase());
+                    
+                    if (!hasSchoolCol || !hasCityCol) {
+                        previewStatus.innerHTML = `<span class="text-yellow-400">Warning:</span> Could not find required columns. ` +
+                            `Expected <code>${schoolColName}</code> and <code>${cityColName}</code>. ` +
+                            `Please check your CSV format or use the advanced options to specify column names.`;
+                    } else {
+                        previewStatus.innerHTML = `<span class="text-green-400">CSV format looks good!</span> Found ${lines.length - 1} schools.`;
+                    }
+                    
+                    csvPreview.classList.remove('hidden');
+                };
+                reader.readAsText(file);
+            }
+
             removeFile.addEventListener('click', () => {
                 csvFile = null;
                 fileInfo.classList.add('hidden');
+                csvPreview.classList.add('hidden');
                 fileInput.value = '';
                 uploadBtn.disabled = true;
             });
@@ -242,7 +415,10 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const csv = e.target.result;
-                    parsedData = parseCSV(csv);
+                    const schoolColName = schoolColumnInput.value.trim() || 'School';
+                    const cityColName = cityColumnInput.value.trim() || 'City';
+                    
+                    parsedData = parseCSV(csv, schoolColName, cityColName);
                     
                     if (parsedData.length === 0) {
                         alert('No data found in CSV or invalid format.');
@@ -258,19 +434,22 @@
                 reader.readAsText(csvFile);
             }
 
-            function parseCSV(csv) {
+            function parseCSV(csv, schoolColName, cityColName) {
                 const lines = csv.split('\n');
                 const result = [];
+                
+                if (lines.length === 0) return result;
+                
                 const headers = lines[0].split(',').map(header => header.trim());
                 
-                // Check if we have the required columns
+                // Find column indices
                 const schoolIndex = headers.findIndex(h => 
-                    h.toLowerCase().includes('school') || h.toLowerCase().includes('name'));
+                    h.toLowerCase() === schoolColName.toLowerCase());
                 const cityIndex = headers.findIndex(h => 
-                    h.toLowerCase().includes('city') || h.toLowerCase().includes('location'));
+                    h.toLowerCase() === cityColName.toLowerCase());
                 
                 if (schoolIndex === -1 || cityIndex === -1) {
-                    alert('CSV must contain columns for school name and city.');
+                    alert(`Could not find required columns: "${schoolColName}" and "${cityColName}". Please check your CSV format.`);
                     return [];
                 }
 
@@ -278,6 +457,12 @@
                     if (lines[i].trim() === '') continue;
                     
                     const values = lines[i].split(',').map(value => value.trim());
+                    
+                    if (values.length <= Math.max(schoolIndex, cityIndex)) {
+                        console.warn(`Line ${i} has fewer columns than expected`);
+                        continue;
+                    }
+                    
                     const school = values[schoolIndex];
                     const city = values[cityIndex];
                     
@@ -444,6 +629,7 @@
                 parsedData = [];
                 results = [];
                 fileInfo.classList.add('hidden');
+                csvPreview.classList.add('hidden');
                 fileInput.value = '';
                 uploadBtn.disabled = true;
                 progressContainer.classList.add('hidden');
@@ -454,5 +640,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966e9fee4534b021',t:'MTc1MzgxMzE2OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966eab4fe3050916',t:'MTc1MzgxMzYzNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
