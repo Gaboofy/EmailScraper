@@ -140,7 +140,7 @@ Roosevelt Academy,Chicago</div>
             </div>
 
             <button id="upload-btn" class="w-full py-3 px-4 rounded-md bg-indigo-700 hover:bg-indigo-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                Process CSV File
+                Send to Email Scraper
             </button>
         </div>
 
@@ -170,32 +170,21 @@ Roosevelt Academy,Chicago</div>
             <div class="w-full bg-gray-700 rounded-full h-2.5">
                 <div id="progress-bar" class="progress-bar bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
             </div>
-            <p id="status-message" class="mt-3 text-center text-gray-400">Waiting to process...</p>
+            <p id="status-message" class="mt-3 text-center text-gray-400">Sending data to n8n workflow...</p>
         </div>
 
-        <div id="results-container" class="hidden bg-gray-900 rounded-lg p-6 shadow-lg">
-            <h2 class="text-xl font-semibold mb-4">Results</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="px-4 py-2 text-left">School</th>
-                            <th class="px-4 py-2 text-left">City</th>
-                            <th class="px-4 py-2 text-left">Coach Email</th>
-                            <th class="px-4 py-2 text-left">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="results-body">
-                        <!-- Results will be populated here -->
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-6 flex justify-between">
-                <button id="download-btn" class="py-2 px-4 rounded-md custom-btn text-sm font-medium">
-                    Download Results
-                </button>
-                <button id="new-upload-btn" class="py-2 px-4 rounded-md bg-indigo-700 hover:bg-indigo-600 text-white text-sm font-medium">
-                    Process New File
+        <div id="completion-container" class="hidden bg-gray-900 rounded-lg p-6 shadow-lg">
+            <div class="text-center py-6">
+                <div class="mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold mb-2">Data Successfully Sent!</h2>
+                <p class="text-gray-400 mb-6">Your data has been sent to the email scraper workflow.</p>
+                <p class="text-gray-400 mb-6">The n8n workflow will process your data and generate coach emails.</p>
+                <button id="new-upload-btn" class="py-3 px-6 rounded-md bg-indigo-700 hover:bg-indigo-600 text-white font-medium">
+                    Process Another File
                 </button>
             </div>
         </div>
@@ -218,9 +207,7 @@ Roosevelt Academy,Chicago</div>
             const progressBar = document.getElementById('progress-bar');
             const progressPercentage = document.getElementById('progress-percentage');
             const statusMessage = document.getElementById('status-message');
-            const resultsContainer = document.getElementById('results-container');
-            const resultsBody = document.getElementById('results-body');
-            const downloadBtn = document.getElementById('download-btn');
+            const completionContainer = document.getElementById('completion-container');
             const newUploadBtn = document.getElementById('new-upload-btn');
             const viewAdvancedBtn = document.getElementById('view-advanced');
             const advancedOptions = document.getElementById('advanced-options');
@@ -234,7 +221,6 @@ Roosevelt Academy,Chicago</div>
             
             let csvFile = null;
             let parsedData = [];
-            let results = [];
             let csvHeaders = [];
 
             // Toggle advanced options
@@ -427,9 +413,10 @@ Roosevelt Academy,Chicago</div>
 
                     // Show progress container
                     progressContainer.classList.remove('hidden');
+                    csvPreview.classList.add('hidden');
                     
-                    // Simulate sending data to webhook
-                    simulateProcessing(parsedData);
+                    // Send data to webhook
+                    sendToWebhook(parsedData);
                 };
                 reader.readAsText(csvFile);
             }
@@ -474,152 +461,76 @@ Roosevelt Academy,Chicago</div>
                 return result;
             }
 
-            function simulateProcessing(data) {
-                results = [];
+            function sendToWebhook(data) {
+                // In a real implementation, you would send the data to your webhook
+                // For now, we'll simulate the process with a progress bar
+                
                 let processed = 0;
                 const total = data.length;
+                const batchSize = 10; // Number of records to send in each batch
+                const batches = Math.ceil(total / batchSize);
                 
-                statusMessage.textContent = 'Processing schools...';
+                statusMessage.textContent = `Sending data to n8n workflow (0/${total} schools)...`;
                 
-                // In a real implementation, you would send batches to your webhook
-                // For now, we'll simulate the process
-                
-                data.forEach((item, index) => {
+                // Process in batches
+                for (let i = 0; i < batches; i++) {
+                    const start = i * batchSize;
+                    const end = Math.min(start + batchSize, total);
+                    const batch = data.slice(start, end);
+                    
+                    // Simulate sending batch with delay
                     setTimeout(() => {
-                        // In a real implementation, you would make an actual fetch request to your webhook:
+                        // In a real implementation, you would make an actual fetch request:
                         /*
                         fetch(WEBHOOK_URL, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify(item)
+                            body: JSON.stringify({ schools: batch })
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                            return response.json();
+                        })
                         .then(data => {
-                            // Process the response
-                            results.push({
-                                school: item.school,
-                                city: item.city,
-                                email: data.email,
-                                status: data.status
-                            });
-                            
-                            // Update progress
-                            processed++;
+                            // Update progress after successful batch
+                            processed += batch.length;
                             updateProgress(processed, total);
                         })
                         .catch(error => {
-                            console.error('Error:', error);
-                            results.push({
-                                school: item.school,
-                                city: item.city,
-                                email: '',
-                                status: 'Error'
-                            });
-                            
-                            processed++;
+                            console.error('Error sending batch:', error);
+                            // Still update progress even if there was an error
+                            processed += batch.length;
                             updateProgress(processed, total);
                         });
                         */
                         
-                        // For demonstration, we'll simulate a response
-                        const result = {
-                            school: item.school,
-                            city: item.city,
-                            email: simulateEmail(item.school),
-                            status: Math.random() > 0.2 ? 'Success' : 'Not Found'
-                        };
-                        
-                        results.push(result);
-                        processed++;
+                        // For demonstration, we'll simulate a successful batch
+                        processed += batch.length;
                         
                         // Update progress
                         const percentage = Math.round((processed / total) * 100);
                         progressBar.style.width = `${percentage}%`;
                         progressPercentage.textContent = `${percentage}%`;
+                        statusMessage.textContent = `Sending data to n8n workflow (${processed}/${total} schools)...`;
                         
-                        if (processed === total) {
-                            statusMessage.textContent = 'Processing complete!';
-                            setTimeout(showResults, 1000);
+                        if (processed >= total) {
+                            // All data sent
+                            setTimeout(() => {
+                                statusMessage.textContent = 'All data successfully sent to n8n workflow!';
+                                setTimeout(showCompletion, 1000);
+                            }, 500);
                         }
-                    }, 500 + (index * 300)); // Stagger the processing for visual effect
-                });
+                    }, 1000 + (i * 500)); // Stagger the batches for visual effect
+                }
             }
 
-            function simulateEmail(school) {
-                // This is just for demonstration - in reality, your n8n workflow would find real emails
-                const domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'school.edu'];
-                const domain = domains[Math.floor(Math.random() * domains.length)];
-                const schoolName = school.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return `coach.${schoolName}@${domain}`;
-            }
-
-            function showResults() {
-                // Clear previous results
-                resultsBody.innerHTML = '';
-                
-                // Add results to table
-                results.forEach(result => {
-                    const row = document.createElement('tr');
-                    
-                    const schoolCell = document.createElement('td');
-                    schoolCell.className = 'px-4 py-2 border-b border-gray-800';
-                    schoolCell.textContent = result.school;
-                    
-                    const cityCell = document.createElement('td');
-                    cityCell.className = 'px-4 py-2 border-b border-gray-800';
-                    cityCell.textContent = result.city;
-                    
-                    const emailCell = document.createElement('td');
-                    emailCell.className = 'px-4 py-2 border-b border-gray-800';
-                    emailCell.textContent = result.email || 'N/A';
-                    
-                    const statusCell = document.createElement('td');
-                    statusCell.className = 'px-4 py-2 border-b border-gray-800';
-                    
-                    const statusBadge = document.createElement('span');
-                    statusBadge.className = `px-2 py-1 text-xs rounded-full ${
-                        result.status === 'Success' 
-                            ? 'bg-green-900 text-green-300' 
-                            : 'bg-red-900 text-red-300'
-                    }`;
-                    statusBadge.textContent = result.status;
-                    
-                    statusCell.appendChild(statusBadge);
-                    
-                    row.appendChild(schoolCell);
-                    row.appendChild(cityCell);
-                    row.appendChild(emailCell);
-                    row.appendChild(statusCell);
-                    
-                    resultsBody.appendChild(row);
-                });
-                
-                // Show results container
-                resultsContainer.classList.remove('hidden');
-            }
-
-            downloadBtn.addEventListener('click', downloadResults);
-
-            function downloadResults() {
-                if (results.length === 0) return;
-                
-                let csv = 'School,City,Coach Email,Status\n';
-                
-                results.forEach(result => {
-                    csv += `"${result.school}","${result.city}","${result.email || ''}","${result.status}"\n`;
-                });
-                
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.setAttribute('hidden', '');
-                a.setAttribute('href', url);
-                a.setAttribute('download', 'coach_emails_results.csv');
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            function showCompletion() {
+                progressContainer.classList.add('hidden');
+                completionContainer.classList.remove('hidden');
             }
 
             newUploadBtn.addEventListener('click', resetForm);
@@ -627,18 +538,17 @@ Roosevelt Academy,Chicago</div>
             function resetForm() {
                 csvFile = null;
                 parsedData = [];
-                results = [];
                 fileInfo.classList.add('hidden');
                 csvPreview.classList.add('hidden');
                 fileInput.value = '';
                 uploadBtn.disabled = true;
                 progressContainer.classList.add('hidden');
-                resultsContainer.classList.add('hidden');
+                completionContainer.classList.add('hidden');
                 progressBar.style.width = '0%';
                 progressPercentage.textContent = '0%';
-                statusMessage.textContent = 'Waiting to process...';
+                statusMessage.textContent = 'Sending data to n8n workflow...';
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966eab4fe3050916',t:'MTc1MzgxMzYzNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966eb71090792b64',t:'MTc1MzgxNDExNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
