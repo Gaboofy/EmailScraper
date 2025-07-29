@@ -104,6 +104,15 @@ Roosevelt Academy,Chicago</div>
                         </div>
                     </div>
                     <p class="text-xs text-gray-400">Leave blank to use default column names (School, City)</p>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-700">
+                        <h3 class="font-medium mb-2">Webhook Configuration</h3>
+                        <div class="mb-3">
+                            <label class="block text-sm mb-1">n8n Webhook URL:</label>
+                            <input type="text" id="webhook-url" class="w-full p-2 rounded-md bg-gray-700 border border-gray-600" placeholder="https://your-n8n-instance.com/webhook/path">
+                        </div>
+                        <p class="text-xs text-gray-400">Enter your n8n webhook URL to receive the data</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -171,6 +180,13 @@ Roosevelt Academy,Chicago</div>
                 <div id="progress-bar" class="progress-bar bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
             </div>
             <p id="status-message" class="mt-3 text-center text-gray-400">Sending data to n8n workflow...</p>
+            <div id="error-container" class="hidden mt-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
+                <p class="font-medium text-red-300">Error sending data</p>
+                <p id="error-message" class="text-sm text-red-200 mt-1"></p>
+                <button id="retry-btn" class="mt-3 py-2 px-4 bg-red-700 hover:bg-red-600 text-white rounded-md text-sm">
+                    Retry
+                </button>
+            </div>
         </div>
 
         <div id="completion-container" class="hidden bg-gray-900 rounded-lg p-6 shadow-lg">
@@ -192,8 +208,8 @@ Roosevelt Academy,Chicago</div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // HARDCODED WEBHOOK URL - Replace this with your actual n8n webhook URL
-            const WEBHOOK_URL = "https://sebvas37.app.n8n.cloud/webhook/scraper";
+            // Default webhook URL - can be overridden in advanced settings
+            let WEBHOOK_URL = "https://sebvas37.app.n8n.cloud/webhook/scraper";
             
             const dropZone = document.getElementById('drop-zone');
             const fileInput = document.getElementById('file-input');
@@ -213,15 +229,25 @@ Roosevelt Academy,Chicago</div>
             const advancedOptions = document.getElementById('advanced-options');
             const schoolColumnInput = document.getElementById('school-column');
             const cityColumnInput = document.getElementById('city-column');
+            const webhookUrlInput = document.getElementById('webhook-url');
             const downloadSampleBtn = document.getElementById('download-sample');
             const csvPreview = document.getElementById('csv-preview');
             const previewHeader = document.getElementById('preview-header');
             const previewBody = document.getElementById('preview-body');
             const previewStatus = document.getElementById('preview-status');
+            const errorContainer = document.getElementById('error-container');
+            const errorMessage = document.getElementById('error-message');
+            const retryBtn = document.getElementById('retry-btn');
             
             let csvFile = null;
             let parsedData = [];
             let csvHeaders = [];
+
+            // Set webhook URL if provided
+            webhookUrlInput.value = WEBHOOK_URL;
+            webhookUrlInput.addEventListener('change', function() {
+                WEBHOOK_URL = this.value.trim();
+            });
 
             // Toggle advanced options
             viewAdvancedBtn.addEventListener('click', () => {
@@ -390,10 +416,24 @@ Roosevelt Academy,Chicago</div>
             });
 
             uploadBtn.addEventListener('click', processCSV);
+            retryBtn.addEventListener('click', () => {
+                errorContainer.classList.add('hidden');
+                sendToWebhook(parsedData);
+            });
 
             function processCSV() {
                 if (!csvFile) {
                     alert('Please select a CSV file first.');
+                    return;
+                }
+
+                // Check webhook URL
+                WEBHOOK_URL = webhookUrlInput.value.trim() || WEBHOOK_URL;
+                if (!WEBHOOK_URL || WEBHOOK_URL === "https://your-n8n-instance.com/webhook/path") {
+                    alert('Please enter a valid webhook URL in the advanced options.');
+                    advancedOptions.classList.remove('hidden');
+                    viewAdvancedBtn.textContent = 'Hide Advanced Options';
+                    webhookUrlInput.focus();
                     return;
                 }
 
@@ -414,6 +454,7 @@ Roosevelt Academy,Chicago</div>
                     // Show progress container
                     progressContainer.classList.remove('hidden');
                     csvPreview.classList.add('hidden');
+                    errorContainer.classList.add('hidden');
                     
                     // Send data to webhook
                     sendToWebhook(parsedData);
@@ -461,70 +502,66 @@ Roosevelt Academy,Chicago</div>
                 return result;
             }
 
-            function sendToWebhook(data) {
-                // In a real implementation, you would send the data to your webhook
-                // For now, we'll simulate the process with a progress bar
+            async function sendToWebhook(data) {
+                // Reset error state
+                errorContainer.classList.add('hidden');
                 
-                let processed = 0;
+                // Update webhook URL from input
+                WEBHOOK_URL = webhookUrlInput.value.trim() || WEBHOOK_URL;
+                
                 const total = data.length;
                 const batchSize = 10; // Number of records to send in each batch
                 const batches = Math.ceil(total / batchSize);
                 
                 statusMessage.textContent = `Sending data to n8n workflow (0/${total} schools)...`;
+                progressBar.style.width = '0%';
+                progressPercentage.textContent = '0%';
+                
+                let processed = 0;
+                let hasError = false;
                 
                 // Process in batches
-                for (let i = 0; i < batches; i++) {
+                for (let i = 0; i < batches && !hasError; i++) {
                     const start = i * batchSize;
                     const end = Math.min(start + batchSize, total);
                     const batch = data.slice(start, end);
                     
-                    // Simulate sending batch with delay
-                    setTimeout(() => {
-                        // In a real implementation, you would make an actual fetch request:
-                        /*
-                        fetch(WEBHOOK_URL, {
+                    try {
+                        // Make the actual fetch request to your webhook
+                        const response = await fetch(WEBHOOK_URL, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({ schools: batch })
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok');
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            // Update progress after successful batch
-                            processed += batch.length;
-                            updateProgress(processed, total);
-                        })
-                        .catch(error => {
-                            console.error('Error sending batch:', error);
-                            // Still update progress even if there was an error
-                            processed += batch.length;
-                            updateProgress(processed, total);
                         });
-                        */
                         
-                        // For demonstration, we'll simulate a successful batch
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        
+                        // Update progress after successful batch
                         processed += batch.length;
-                        
-                        // Update progress
                         const percentage = Math.round((processed / total) * 100);
                         progressBar.style.width = `${percentage}%`;
                         progressPercentage.textContent = `${percentage}%`;
                         statusMessage.textContent = `Sending data to n8n workflow (${processed}/${total} schools)...`;
                         
-                        if (processed >= total) {
-                            // All data sent
-                            setTimeout(() => {
-                                statusMessage.textContent = 'All data successfully sent to n8n workflow!';
-                                setTimeout(showCompletion, 1000);
-                            }, 500);
-                        }
-                    }, 1000 + (i * 500)); // Stagger the batches for visual effect
+                        // Small delay between batches to avoid overwhelming the server
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                    } catch (error) {
+                        console.error('Error sending batch:', error);
+                        errorContainer.classList.remove('hidden');
+                        errorMessage.textContent = `Failed to send data: ${error.message}. Please check your webhook URL and try again.`;
+                        hasError = true;
+                    }
+                }
+                
+                if (!hasError && processed >= total) {
+                    // All data sent successfully
+                    statusMessage.textContent = 'All data successfully sent to n8n workflow!';
+                    setTimeout(showCompletion, 1000);
                 }
             }
 
@@ -544,11 +581,12 @@ Roosevelt Academy,Chicago</div>
                 uploadBtn.disabled = true;
                 progressContainer.classList.add('hidden');
                 completionContainer.classList.add('hidden');
+                errorContainer.classList.add('hidden');
                 progressBar.style.width = '0%';
                 progressPercentage.textContent = '0%';
                 statusMessage.textContent = 'Sending data to n8n workflow...';
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966eb71090792b64',t:'MTc1MzgxNDExNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966ece58273a2f64',t:'MTc1MzgxNTA2OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
